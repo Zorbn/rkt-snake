@@ -3,7 +3,7 @@
 (module+ main
   (require raylib/2d/unsafe)
 
-  (struct state (snake apple last-move-x last-move-y))
+  (struct state (snake apple last-move-x last-move-y time))
 
   (define board-size 20)
   (define tile-size 16)
@@ -11,7 +11,7 @@
   (define snake-color (make-Color 0 255 0 255))
   (define apple-color (make-Color 255 0 0 255))
 
-  (SetTargetFPS 10)
+  (SetTargetFPS 60)
   (InitWindow window-size window-size "Snake")
 
   (define (map-two f cell)
@@ -28,28 +28,24 @@
   (define (grow-snake snake)
     (append snake (list (last snake))))
 
-  (define (is-snake-colliding snake apple)
+  (define (is-snake-colliding-with-apple snake apple)
     (foldr (lambda (seg acc) (or (equal? seg apple) acc)) false snake))
 
-  (define (loop last-state)
-    (when (not (WindowShouldClose))
-      (BeginDrawing)
-      (ClearBackground RAYWHITE)
+  (define (is-snake-colliding-with-self snake)
+    (let ([snake-head (car snake)] [snake-tail (cdr snake)])
+      (foldr (lambda (seg acc) (or (equal? seg snake-head) acc)) false snake-tail)))
 
+  (define (make-snake)
+    (let ([board-center (/ board-size 2)])
+        (list (vector board-center board-center))))
+
+  (let loop ([last-state (state (make-snake) #(4 4) 1 0 0)])
+    (when (not (WindowShouldClose))
       (define last-snake (state-snake last-state))
       (define last-apple (state-apple last-state))
       (define last-move-x (state-last-move-x last-state))
       (define last-move-y (state-last-move-y last-state))
-
-      (for-each (lambda (seg)
-                  (let ([x (vector-ref seg 0)] [y (vector-ref seg 1)])
-                    (DrawRectangle (* x tile-size) (* y tile-size) tile-size tile-size snake-color)))
-                last-snake)
-
-      (let ([x (vector-ref last-apple 0)] [y (vector-ref last-apple 1)])
-        (DrawRectangle (* x tile-size) (* y tile-size) tile-size tile-size apple-color))
-
-      (EndDrawing)
+      (define last-time (state-time last-state))
 
       (define input-left (if (IsKeyDown KEY_LEFT) 1 0))
       (define input-right (if (IsKeyDown KEY_RIGHT) 1 0))
@@ -65,13 +61,31 @@
           [got-no-input last-move-y]
           [else input-y]))
 
-      (define ate-apple (is-snake-colliding last-snake last-apple))
-      (define next-apple (if ate-apple (vector (random board-size) (random board-size)) last-apple))
-      (define grown-snake (if ate-apple (grow-snake last-snake) last-snake))
-      (define next-snake (move-snake grown-snake move-x move-y))
+      (BeginDrawing)
+      (ClearBackground RAYWHITE)
 
-      (loop (state next-snake next-apple move-x move-y))))
+      (for-each (lambda (seg)
+                  (let ([x (vector-ref seg 0)] [y (vector-ref seg 1)])
+                    (DrawRectangle (* x tile-size) (* y tile-size) tile-size tile-size snake-color)))
+                last-snake)
 
-  (loop (state '(#(0 0)) #(4 4) 1 0))
+      (let ([x (vector-ref last-apple 0)] [y (vector-ref last-apple 1)])
+        (DrawRectangle (* x tile-size) (* y tile-size) tile-size tile-size apple-color))
+
+      (EndDrawing)
+
+      (define next-time (+ last-time (GetFrameTime)))
+
+      (if (> next-time 0.1)
+          (let ()
+            (define ate-apple (is-snake-colliding-with-apple last-snake last-apple))
+            (define next-apple (if ate-apple (vector (random board-size) (random board-size)) last-apple))
+            (define grown-snake (if ate-apple (grow-snake last-snake) last-snake))
+            (define moved-snake (move-snake grown-snake move-x move-y))
+            (define next-snake (if (is-snake-colliding-with-self moved-snake) (make-snake) moved-snake))
+
+            (loop (state next-snake next-apple move-x move-y (- next-time 0.1))))
+
+          (loop (state last-snake last-apple move-x move-y next-time)))))
 
   (CloseWindow))
